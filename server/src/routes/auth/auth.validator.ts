@@ -37,14 +37,44 @@ export const registerSchema = z.object({
   gender: z.enum(["male", "female", "other"]),
 });
 
-export const resetPasswordSchema = z.object({
+export const createPasswordSchema = z.object({
   password: strongPasswordSchema,
 });
 
 export const emailOtpSchema = z.object({
-  email: z.string().email("Invalid email format"),
+  email: z.email("Invalid email format"),
   otp: z
     .string()
     .length(6, "OTP must be 6 digits")
     .regex(/^\d+$/, "OTP must be numeric"),
 });
+
+export const forgetPasswordSchema = z.object({
+  email: z.email({ message: "Invalid email format" }),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z
+      .string()
+      .min(32, "Reset token is invalid")
+      .max(256, "Reset token is invalid"),
+
+    newPassword: z
+      .string()
+      .min(8, "Password must be at least 8 characters long")
+      .max(128, "Password is too long")
+      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+      .regex(/[0-9]/, "Password must contain at least one number")
+      .regex(
+        /[^A-Za-z0-9]/,
+        "Password must contain at least one special character"
+      ),
+
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });

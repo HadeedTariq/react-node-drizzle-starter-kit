@@ -12,6 +12,8 @@ import HomePage from "./pages/app/routes/HomePage";
 import Layout from "./pages/app/components/Layout";
 import Authenticate from "./pages/auth/routes/Authenticate";
 import AuthProtector from "./pages/auth/components/AuthProtector";
+import ForgetPassword from "./pages/auth/routes/ForgetPassword";
+import ResetPassword from "./pages/auth/routes/ResetPassword";
 
 function App() {
   const { user } = useFullApp();
@@ -41,6 +43,8 @@ function App() {
         }
       >
         <Route index element={<Authenticate />} />
+        <Route path="forgot-password" element={<ForgetPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
       </Route>
     </Routes>
   );

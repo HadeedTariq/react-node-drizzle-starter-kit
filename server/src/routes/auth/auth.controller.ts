@@ -1,5 +1,7 @@
 import { NextFunction, Request, Response } from "express";
+
 import { verify } from "jsonwebtoken";
+import crypto from "crypto";
 
 import { env } from "@/common/utils/envConfig";
 import { hash, compare } from "bcrypt";
@@ -7,18 +9,21 @@ import {
   generateAccessAndRefreshToken,
   generateOTP,
   sendOTPEmail,
+  sendResetPasswordEmail,
 } from "@/utils/auth.util";
 import { errorParser } from "@/utils/errorParser.util";
 import {
   authSchema,
+  createPasswordSchema,
   emailOtpSchema,
+  forgetPasswordSchema,
   registerSchema,
   resetPasswordSchema,
 } from "./auth.validator";
 import { User } from "@/types/general";
 import { logger } from "@/common/middleware/requestLogger";
 import { db } from "@/db/client";
-import { emailOtps, users } from "@/db";
+import { emailOtps, passwordResetTokens, users } from "@/db";
 import { and, eq, gt } from "drizzle-orm";
 
 class UserController {
@@ -34,6 +39,7 @@ class UserController {
     // ! Oauth
     this.authenticate_google = this.authenticate_google.bind(this);
     this.authenticate_facebook = this.authenticate_facebook.bind(this);
+    this.resetPassword = this.resetPassword.bind(this);
   }
 
   async authenticate_google(req: Request, res: Response, next: NextFunction) {
@@ -374,7 +380,7 @@ class UserController {
 
   async createPassword(req: Request, res: Response, next: NextFunction) {
     try {
-      const parsed = resetPasswordSchema.safeParse(req.body);
+      const parsed = createPasswordSchema.safeParse(req.body);
 
       if (!parsed.success) {
         return errorParser(parsed, res);
@@ -412,6 +418,165 @@ class UserController {
     } catch (error) {
       next({
         message: "An error occurred while creating the password",
+        error,
+        status: 500,
+      });
+    }
+  }
+  async forgetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = forgetPasswordSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return errorParser(parsed, res);
+      }
+
+      const { email } = parsed.data;
+
+      const userResult = await db
+        .select({
+          id: users.id,
+          email: users.email,
+        })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (userResult.length === 0) {
+        return res.status(200).json({
+          message:
+            "If an account with this email exists, a password reset link has been sent.",
+        });
+      }
+
+      const user = userResult[0];
+
+      await db
+        .update(passwordResetTokens)
+        .set({ used: true })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, user.id),
+            eq(passwordResetTokens.used, false)
+          )
+        );
+
+      const rawToken = crypto.randomBytes(32).toString("hex");
+
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(rawToken)
+        .digest("hex");
+
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+      const insertResult = await db
+        .insert(passwordResetTokens)
+        .values({
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+          used: false,
+        })
+        .returning({ id: passwordResetTokens.id });
+
+      if (insertResult.length === 0) {
+        throw new Error("Failed to persist password reset token");
+      }
+
+      const resetPasswordUrl = `${env.CORS_ORIGIN}/authenticate/reset-password?token=${rawToken}`;
+
+      const { success, error } = await sendResetPasswordEmail(
+        email,
+        resetPasswordUrl
+      );
+
+      if (!success) {
+        throw new Error(error || "Password reset email sending failed");
+      }
+
+      return res.status(200).json({
+        message:
+          "If an account with this email exists, a password reset link has been sent.",
+      });
+    } catch (error) {
+      next({
+        message:
+          "An error occurred while processing the password reset request",
+        error,
+        status: 500,
+      });
+    }
+  }
+  async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const parsed = resetPasswordSchema.safeParse(req.body);
+
+      if (!parsed.success) {
+        return errorParser(parsed, res);
+      }
+
+      const { token, newPassword } = parsed.data;
+
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+      const tokenResult = await db
+        .select({
+          id: passwordResetTokens.id,
+          userId: passwordResetTokens.userId,
+          expiresAt: passwordResetTokens.expiresAt,
+          used: passwordResetTokens.used,
+        })
+        .from(passwordResetTokens)
+        .where(eq(passwordResetTokens.tokenHash, tokenHash))
+        .limit(1);
+
+      if (tokenResult.length === 0) {
+        return res.status(400).json({
+          message: "Invalid or expired reset token",
+        });
+      }
+
+      const resetToken = tokenResult[0];
+
+      if (resetToken.used) {
+        return res.status(400).json({
+          message: "This reset token has already been used",
+        });
+      }
+
+      if (resetToken.expiresAt.getTime() < Date.now()) {
+        return res.status(400).json({
+          message: "Reset token has expired",
+        });
+      }
+
+      const hashedPassword = await this.hashPassword(newPassword);
+
+      await db.transaction(async (tx) => {
+        const updatedUser = await tx
+          .update(users)
+          .set({ password: hashedPassword })
+          .where(eq(users.id, resetToken.userId))
+          .returning({ id: users.id });
+
+        if (updatedUser.length === 0) {
+          throw new Error("User password update failed");
+        }
+
+        await tx
+          .update(passwordResetTokens)
+          .set({ used: true })
+          .where(eq(passwordResetTokens.id, resetToken.id));
+      });
+
+      return res.status(200).json({
+        message: "Password has been reset successfully",
+      });
+    } catch (error) {
+      next({
+        message:
+          "An error occurred while processing the password reset request",
         error,
         status: 500,
       });

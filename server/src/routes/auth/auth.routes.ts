@@ -43,6 +43,9 @@ router.get(
   asyncHandler(userController.authenticate_facebook)
 );
 
+router.post("/forgot-password", asyncHandler(userController.forgetPassword));
+router.post("/reset-password", asyncHandler(userController.resetPassword));
+
 router.use(checkAuth);
 router.post("/create-password", asyncHandler(userController.createPassword));
 

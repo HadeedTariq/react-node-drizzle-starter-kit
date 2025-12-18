@@ -70,6 +70,97 @@ export const sendOTPEmail = async (
   }
 };
 
+export const sendResetPasswordEmail = async (
+  to: string,
+  url: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: String(env.NODE_MAILER_USER),
+        pass: String(env.NODE_MAILER_PASSWORD),
+      },
+    });
+
+    const mailOptions = {
+      from: `"React Starter Kit" <${env.NODE_MAILER_USER}>`,
+      to,
+      subject: "Reset Your React Starter Kit Password",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #eaeaea; border-radius: 8px;">
+          
+          <h2 style="color: #2c3e50; margin-bottom: 8px;">
+            Password Reset Request
+          </h2>
+
+          <p style="font-size: 16px; color: #333;">
+            We received a request to reset the password for your
+            <strong>React Starter Kit</strong> account.
+          </p>
+
+          <p style="font-size: 16px; color: #333;">
+            Click the button below to reset your password. This link is
+            <strong>valid for a limited time</strong> and can only be used once.
+          </p>
+
+          <div style="text-align: center; margin: 32px 0;">
+            <a
+              href="${url}"
+              style="
+                background-color: #0070f3;
+                color: #ffffff;
+                padding: 14px 28px;
+                text-decoration: none;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: bold;
+                display: inline-block;
+              "
+            >
+              Reset Password
+            </a>
+          </div>
+
+          <p style="font-size: 14px; color: #666;">
+            If the button doesn’t work, copy and paste this link into your browser:
+          </p>
+
+          <p style="font-size: 14px; color: #0070f3; word-break: break-all;">
+            ${url}
+          </p>
+
+          <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+
+          <p style="font-size: 13px; color: #999;">
+            If you did not request a password reset, you can safely ignore this
+            email. Your password will remain unchanged.
+          </p>
+
+          <p style="font-size: 12px; color: #999;">
+            — The React Starter Kit Team
+          </p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error: any) {
+    logger.error({
+      event: "password_reset_email_failed",
+      error: error?.message,
+      code: error?.code,
+      metadata: { email: to },
+    });
+
+    return {
+      success: false,
+      error: error?.message || "Failed to send reset password email",
+    };
+  }
+};
+
 export const generateAccessAndRefreshToken = function (user: any) {
   const refreshToken = sign({ id: user.id }, env.JWT_REFRESH_TOKEN_SECRET, {
     expiresIn: "15d",

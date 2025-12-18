@@ -17,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const loginSchema = z.object({
   email: z.string().min(1, "Email or Phone number is required"),
@@ -135,6 +136,12 @@ const CredentialsLogin = () => {
             </FormItem>
           )}
         />
+        <Link
+          className="text-red-500 text-sm underline flex justify-end "
+          to={"/authenticate/forgot-password"}
+        >
+          Forgot Password?
+        </Link>
 
         <Button
           type="submit"
