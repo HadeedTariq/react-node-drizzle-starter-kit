@@ -508,6 +508,7 @@ class UserController {
       });
     }
   }
+
   async resetPassword(req: Request, res: Response, next: NextFunction) {
     try {
       const parsed = resetPasswordSchema.safeParse(req.body);

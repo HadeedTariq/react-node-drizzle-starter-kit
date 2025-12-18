@@ -1,7 +1,6 @@
 # Node.js dependencies
 /node_modules
 /src/scripts
-/drizzle
 # Logs
 *.log
 npm-debug.log*
